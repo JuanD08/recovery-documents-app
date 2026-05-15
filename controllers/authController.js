@@ -5,7 +5,6 @@ const { encrypt } = require('../utils/crypto');
 
 exports.register = async (req, res) => {
     try {
-        // CORRECCIÓN: Recibimos password_hash (que es el nombre exacto que manda Android)
         const { nombre, email, password_hash, telefono, cuenta_billetera } = req.body;
 
         const [rows] = await pool.query('SELECT * FROM usuarios WHERE email = ?', [email]);
@@ -14,7 +13,6 @@ exports.register = async (req, res) => {
         }
 
         const salt = await bcrypt.genSalt(10);
-        // Encriptamos la variable correcta
         const passwordHashed = await bcrypt.hash(password_hash, salt);
         
         const telefonoEncriptado = telefono ? encrypt(telefono) : null;
@@ -30,7 +28,6 @@ exports.register = async (req, res) => {
 
         res.status(201).json({ message: 'Usuario registrado exitosamente', id: result.insertId });
     } catch (error) {
-        // ESTO NOS SALVARÁ LA VIDA: Imprime el error real en la consola de Docker
         console.error('❌ Error real en el Registro:', error); 
         res.status(500).json({ error: 'Error interno del servidor' });
     }
@@ -38,7 +35,6 @@ exports.register = async (req, res) => {
 
 exports.login = async (req, res) => {
     try {
-        // CORRECCIÓN: Recibimos password_hash desde Android
         const { email, password_hash } = req.body;
 
         const [rows] = await pool.query('SELECT * FROM usuarios WHERE email = ?', [email]);
@@ -47,7 +43,6 @@ exports.login = async (req, res) => {
         }
 
         const user = rows[0];
-        // Comparamos lo que llega de Android con lo que está guardado en MySQL
         const isMatch = await bcrypt.compare(password_hash, user.password_hash);
         
         if (!isMatch) {
@@ -102,7 +97,6 @@ exports.forgotPassword = async (req, res) => {
 
         await pool.query('UPDATE usuarios SET otp_codigo = ?, otp_expiracion = ? WHERE email = ?', [otpCode, expirationTime, email]);
 
-        // SIMULACIÓN DE CORREO EN LA CONSOLA
         console.log(`\n=========================================`);
         console.log(`📧 SIMULACIÓN DE CORREO A: ${email}`);
         console.log(`🔑 TU CÓDIGO DE RECUPERACIÓN ES: ${otpCode}`);
@@ -116,8 +110,10 @@ exports.forgotPassword = async (req, res) => {
 
 exports.resetPassword = async (req, res) => {
     try {
-        const { email, otp_codigo, nueva_password } = req.body;
-        const [rows] = await pool.query('SELECT * FROM usuarios WHERE email = ? AND otp_codigo = ?', [email, otp_codigo]);
+        // CORRECCIÓN: Nombres que coinciden con Android (codigo_otp y nueva_password_hash)
+        const { email, codigo_otp, nueva_password_hash } = req.body;
+        
+        const [rows] = await pool.query('SELECT * FROM usuarios WHERE email = ? AND otp_codigo = ?', [email, codigo_otp]);
 
         if (rows.length === 0) {
             return res.status(400).json({ error: 'Código incorrecto o expirado' });
@@ -131,12 +127,14 @@ exports.resetPassword = async (req, res) => {
         }
 
         const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash(nueva_password, salt);
+        const passwordHash = await bcrypt.hash(nueva_password_hash, salt);
 
         await pool.query('UPDATE usuarios SET password_hash = ?, otp_codigo = NULL, otp_expiracion = NULL WHERE email = ?', [passwordHash, email]);
 
+        console.log(`✅ Contraseña actualizada con éxito para: ${email}`);
         res.status(200).json({ message: 'Contraseña actualizada exitosamente' });
     } catch (error) {
+        console.error(error);
         res.status(500).json({ error: 'Error interno' });
     }
 };
